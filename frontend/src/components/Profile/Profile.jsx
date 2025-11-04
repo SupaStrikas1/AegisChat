@@ -2,11 +2,11 @@ import React, { useState, useContext } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { AuthContext } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { UserIcon, PlusIcon } from '@heroicons/react/24/solid';
 
 const Profile = () => {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     name: user?.name || '',

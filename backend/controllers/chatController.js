@@ -1,81 +1,148 @@
 const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const User = require('../models/User');
-const admin = require('firebase-admin');
+const cloudinary = require('../config/cloudinary');
+const streamifier = require('streamifier');
+const path = require('path');
+const fs = require('fs');
 
-// Create chat (1-1 or group)
+// ---------- CREATE CHAT ----------
 const createChat = async (req, res) => {
-  const { participants, isGroup, name } = req.body;  // participants: array of userIds
   try {
-    // Ensure requester is included
-    const allParticipants = [...new Set([req.user._id, ...participants])];
+    const { participants, isGroup, name } = req.body;
 
-    // Check if 1-1 chat exists
-    if (!isGroup && allParticipants.length === 2) {
+    if (!participants || participants.length < 2) {
+      return res.status(400).json({ msg: 'At least 2 participants required' });
+    }
+
+    // prevent duplicate 1-on-1 chats
+    if (!isGroup) {
       const existing = await Chat.findOne({
         isGroup: false,
-        participants: { $all: allParticipants, $size: allParticipants.length },
+        participants: { $all: participants, $size: participants.length },
       });
       if (existing) return res.json(existing);
     }
 
-    const chat = new Chat({ isGroup, name, participants: allParticipants });
+    const chat = new Chat({
+      participants,
+      isGroup: !!isGroup,
+      name: isGroup ? name : undefined,
+    });
     await chat.save();
-    res.json(chat);
+    await chat.populate('participants', 'name username profilePic online');
+
+    res.status(201).json(chat);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ msg: 'Server error' });
   }
 };
 
-// Send message (server receives encrypted data)
-const sendMessage = async (req, res) => {
-  const { chatId, type, content, iv, encryptedSymKeys } = req.body;  // content, iv, encryptedSymKeys are base64
+// ---------- GET ALL USER CHATS ----------
+const getAllChats = async (req, res) => {
   try {
+    const chats = await Chat.find({ participants: req.user._id })
+      .populate('participants', 'name username profilePic online')
+      .sort({ updatedAt: -1 });
+
+    // attach last message preview
+    const enriched = await Promise.all(
+      chats.map(async (c) => {
+        const last = await Message.findOne({ chatId: c._id })
+          .sort({ createdAt: -1 })
+          .select('content type createdAt');
+        return { ...c.toObject(), lastMessage: last };
+      })
+    );
+
+    res.json(enriched);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  }
+};
+
+// ---------- SEND MESSAGE ----------
+const sendMessage = async (req, res) => {
+  try {
+    const { chatId, content, type = 'text' } = req.body;
+
+    if (!chatId || !content) {
+      return res.status(400).json({ msg: 'chatId and content are required' });
+    }
+
     const chat = await Chat.findById(chatId);
-    if (!chat || !chat.participants.includes(req.user._id)) return res.status(400).json({ msg: 'Invalid chat' });
+    if (!chat) {
+      return res.status(404).json({ msg: 'Chat not found' });
+    }
+
+    if (!chat.participants.includes(req.user._id)) {
+      return res.status(403).json({ msg: 'Not authorized' });
+    }
 
     const message = new Message({
-      chat: chatId,
+      chat: chatId,        // ← Changed from chatId to chat
       sender: req.user._id,
+      content,
       type,
-      content,  // ciphertext
-      iv,
-      senderPublicKey: req.user.publicKey,
-      encryptedSymKeys,  // Map for groups
     });
-    await message.save();
 
-    chat.lastMessage = message._id;
+    await message.save();
+    await message.populate('sender', 'name username profilePic');
+
+    chat.updatedAt = Date.now();
     await chat.save();
 
-    // Notify recipients via Firebase (if offline)
-    const recipients = chat.participants.filter(id => id.toString() !== req.user._id.toString());
-    for (const recId of recipients) {
-      const recUser = await User.findById(recId);
-      if (recUser.fcmToken && !recUser.online) {  // Only if offline
-        admin.messaging().send({
-          token: recUser.fcmToken,
-          notification: { title: 'New Message', body: `${req.user.name}: [Encrypted Message]` },
-          data: { chatId: chatId.toString() },
-        });
-      }
+    if (req.io) {
+      req.io.to(chatId).emit('message', message);
     }
 
     res.json(message);
   } catch (err) {
+    console.error('sendMessage error:', err.message, err.stack);
     res.status(500).json({ msg: 'Server error' });
   }
 };
 
-// Get chat messages
+// ---------- GET MESSAGES ----------
 const getMessages = async (req, res) => {
-  const { chatId } = req.params;
   try {
-    const messages = await Message.find({ chat: chatId }).populate('sender', 'name profilePic');
+    const { chatId } = req.params;
+    const messages = await Message.find({ chat: chatId })  // ← use 'chat'
+      .populate('sender', 'name username profilePic')
+      .sort({ createdAt: 1 });
     res.json(messages);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ msg: 'Server error' });
   }
 };
 
-module.exports = { createChat, sendMessage, getMessages };
+// ---------- FILE UPLOAD ----------
+const uploadFile = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ msg: 'No file uploaded' });
+
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: 'aegischat_files', resource_type: 'auto' },
+        (error, result) => (error ? reject(error) : resolve(result))
+      );
+      streamifier.createReadStream(req.file.buffer).pipe(stream);
+    });
+
+    res.json({ url: result.secure_url });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Upload failed' });
+  }
+};
+
+module.exports = {
+  createChat,
+  getAllChats,
+  sendMessage,
+  getMessages,
+  uploadFile,
+};

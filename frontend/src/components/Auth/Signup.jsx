@@ -1,10 +1,10 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { LockClosedIcon } from '@heroicons/react/24/solid';
 
 const Signup = () => {
-  const { signup } = useContext(AuthContext);
+  const { signup } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     name: '',

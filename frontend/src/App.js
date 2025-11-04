@@ -1,22 +1,24 @@
 import React, { useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthContext, AuthProvider } from './contexts/AuthContext'; // Import AuthProvider
+import { useAuth, AuthProvider } from './contexts/AuthContext'; // Import AuthProvider
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import LoginPage from './pages/LoginPage';
+import ChatsPage from './pages/ChatsPage';
+import RegisterPage from './pages/RegisterPage';
+import ProfilePage from './pages/ProfilePage';
+import Navbar from './components/Navbar';
+import HomePage from './pages/HomePage';
+import FriendsPage from './pages/FriendsPage';
 import Home from './components/Home';
-import Login from './components/Auth/Login';
-import Signup from './components/Auth/Signup';
-import Profile from './components/Profile/Profile';
-import FriendsList from './components/Friends/FriendsList';
-import ChatList from './components/Chat/ChatList';
-import ChatWindow from './components/Chat/ChatWindow';
 
 const queryClient = new QueryClient();
 
 const App = () => {
-  const { user, loading } = useContext(AuthContext);
+  const { user, loading } = useAuth();
 
   return (
     <Router>
+      <Navbar />
       <Routes>
         <Route
           path="/"
@@ -26,18 +28,17 @@ const App = () => {
                 <p>Loading...</p>
               </div>
             ) : user ? (
-              <Home />
+              <HomePage />
             ) : (
               <Navigate to="/login" />
             )
           }
         />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/friends" element={<FriendsList />} />
-        <Route path="/chats" element={<ChatList />} />
-        <Route path="/chat/:id" element={<ChatWindow />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<RegisterPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/friends" element={<FriendsPage />} />
+        <Route path="/chats" element={<ChatsPage />} />
       </Routes>
     </Router>
   );

@@ -1,129 +1,257 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import api from '../../services/api';
-import { getSocket } from '../../services/socketService';
-import { encryptMessage, decryptMessage, encryptGroupMessage, decryptGroupMessage, deriveSharedKey } from '../../utils/cryptoUtils';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../../firebase';
+import { useState, useEffect, useRef, useContext } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import io from "socket.io-client";
+import api from "../../services/api";
+import { useAuth } from "../../contexts/AuthContext";
+import {
+  PaperClipIcon,
+  PaperAirplaneIcon,
+  XMarkIcon,
+  PhotoIcon,
+  DocumentIcon,
+} from "@heroicons/react/24/solid";
 
-const ChatWindow = ({ chatId }) => {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+const SOCKET_URL = "http://localhost:5000";
+
+const ChatWindow = ({ chat }) => {
+  const chatId = chat._id;
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [message, setMessage] = useState("");
   const [typing, setTyping] = useState(false);
-  const socket = getSocket();
+  const [file, setFile] = useState(null);
+  const fileInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const [socket, setSocket] = useState(null);
 
-  // Fetch messages
-  const { data } = useQuery(['messages', chatId], () => api.get(`/messages/${chatId}`).then(res => res.data));
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
-  // Fetch chat details for participants and public keys
-  const { data: chat } = useQuery(['chat', chatId], () => api.get(`/chat/${chatId}`).then(res => res.data));
-
-  useEffect(() => {
-    if (data) {
-      // Decrypt messages
-      const decryptAll = async () => {
-        const decrypted = await Promise.all(data.map(async msg => {
-          try {
-            if (msg.type !== 'text') return msg;  // Media not encrypted here (for simplicity)
-            let sharedKey;
-            if (!chat.isGroup) {
-              // 1-1: Derive with sender or recipient
-              const otherId = msg.sender._id === localStorage.getItem('userId') ? chat.participants[1].publicKey : msg.sender.publicKey;
-              const salt = [localStorage.getItem('userId'), msg.sender._id].sort().join(':');
-              sharedKey = await deriveSharedKey(otherId, salt);
-              const text = await decryptMessage(msg.content, msg.iv, sharedKey);
-              return { ...msg, content: text };
-            } else {
-              // Group
-              const text = await decryptGroupMessage(msg.content, msg.iv, msg.encryptedSymKeys, msg.senderPublicKey);
-              return { ...msg, content: text };
-            }
-          } catch (err) {
-            return { ...msg, content: '[Decryption Failed]' };
-          }
-        }));
-        setMessages(decrypted);
-      };
-      decryptAll();
-    }
-  }, [data, chat]);
-
-  // Real-time
-  useEffect(() => {
-    socket.on('newMessage', (msg) => {
-      // Decrypt and add
-      // Similar to above...
-      setMessages(prev => [...prev, msg]);  // Placeholder: add decryption
-    });
-
-    socket.on('typing', () => setTyping(true));
-
-    return () => {
-      socket.off('newMessage');
-      socket.off('typing');
-    };
-  }, [socket]);
-
-  // Send message mutation
-  const sendMutation = useMutation(async ({ type, content, iv, encryptedSymKeys }) => {
-    const res = await api.post('/message', { chatId, type, content, iv, encryptedSymKeys });
-    socket.emit('newMessage', res.data);
+  // === FETCH MESSAGES ===
+  const { data: messages = [] } = useQuery({
+    queryKey: ["messages", chatId],
+    queryFn: () => api.get(`/messages/${chatId}`).then((r) => r.data),
+    enabled: !!chatId,
   });
 
-  const handleSend = async () => {
-    if (!input) return;
-    let payload;
-    if (!chat.isGroup) {
-      // 1-1
-      const otherParticipant = chat.participants.find(p => p._id !== localStorage.getItem('userId'));
-      const salt = [localStorage.getItem('userId'), otherParticipant._id].sort().join(':');
-      const sharedKey = await deriveSharedKey(otherParticipant.publicKey, salt);
-      const { ciphertext, iv } = await encryptMessage(input, sharedKey);
-      payload = { type: 'text', content: ciphertext, iv, encryptedSymKeys: null };
+  // === SEND TEXT MESSAGE ===
+  const sendText = useMutation({
+    mutationFn: (content) =>
+      api.post("/message", { chatId, content, type: "text" }),
+    onSuccess: (res) => {
+      queryClient.setQueryData(["messages", chatId], (old) => [
+        ...old,
+        res.data,
+      ]);
+      setMessage("");
+    },
+  });
+
+  // === UPLOAD FILE ===
+  const uploadFileMut = useMutation({
+    mutationFn: (file) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return api.post("/message/upload", fd);
+    },
+    onSuccess: (res) => {
+      sendText.mutate(res.data.url);
+      setFile(null);
+    },
+  });
+
+  // === SOCKET.IO ===
+  useEffect(() => {
+    const sk = io(SOCKET_URL, {
+      auth: { token: localStorage.getItem("token") },
+    });
+
+    sk.on("connect", () => sk.emit("joinChat", chatId));
+    sk.on("message", (msg) => {
+      queryClient.setQueryData(["messages", chatId], (old) => [...old, msg]);
+    });
+    sk.on("typing", ({ userId, isTyping }) => {
+      if (userId !== user._id) setTyping(isTyping);
+    });
+
+    setSocket(sk);
+
+    return () => {
+      sk.emit("leaveChat", chatId);
+      sk.disconnect();
+    };
+  }, [chatId, user._id, queryClient]);
+
+  // === TYPING INDICATOR ===
+  useEffect(() => {
+    if (!socket || !message) return;
+    socket.emit("typing", { chatId, isTyping: true });
+    const timeout = setTimeout(
+      () => socket.emit("typing", { chatId, isTyping: false }),
+      1000
+    );
+    return () => clearTimeout(timeout);
+  }, [message, socket, chatId]);
+
+  const handleSend = () => {
+    if (!message.trim() && !file) return;
+    if (file) {
+      uploadFileMut.mutate(file);
     } else {
-      // Group
-      const publicKeys = new Map(chat.participants.map(p => [p._id, p.publicKey]));
-      const { content, iv, encryptedSymKeys } = await encryptGroupMessage(input, chat.participants, publicKeys);
-      payload = { type: 'text', content, iv, encryptedSymKeys };
+      sendText.mutate(message);
     }
-    sendMutation.mutate(payload);
-    setInput('');
   };
 
-  // File upload (image/file)
-  const handleFile = async (e) => {
-    const file = e.target.files[0];
-    const storageRef = ref(storage, `media/${file.name}`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
-    // For E2EE media: Could encrypt file client-side, but for simplicity, store URL (assume Firebase security rules protect)
-    sendMutation.mutate({ type: file.type.startsWith('image') ? 'image' : 'file', content: url, iv: null, encryptedSymKeys: null });
+  const handleFile = (e) => {
+    const f = e.target.files[0];
+    if (f && f.size > 10 * 1024 * 1024) {
+      alert("File must be < 10MB");
+      return;
+    }
+    setFile(f);
   };
 
-  // Typing
-  const handleTyping = () => {
-    socket.emit('typing', { chatId });
-  };
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  if (!chat) return <div className="p-4 text-center">Loading...</div>;
+
+  const otherUser = chat.isGroup
+    ? null
+    : chat.participants.find((p) => p._id !== user._id);
 
   return (
-    <div className="flex flex-col h-screen">
-      <div className="flex-1 overflow-y-auto p-4">
-        {messages.map(msg => (
-          <div key={msg._id} className="mb-2">
-            <span>{msg.sender.name}: </span>
-            {msg.type === 'text' ? msg.content : <a href={msg.content}>Download</a>}
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
+      {/* Header */}
+      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 p-4 flex items-center">
+        <div className="flex items-center flex-1">
+          {otherUser?.profilePic ? (
+            <img
+              src={otherUser.profilePic}
+              alt=""
+              className="w-10 h-10 rounded-full mr-3"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white mr-3 text-sm">
+              {otherUser?.name[0]}
+            </div>
+          )}
+          <div>
+            <h3 className="font-semibold">{otherUser?.name || chat.name}</h3>
+            <p className="text-xs text-gray-500">
+              {typing ? "typing..." : otherUser?.online ? "Online" : "Offline"}
+            </p>
           </div>
-        ))}
-        {typing && <div>Typing...</div>}
+        </div>
       </div>
-      <input type="file" onChange={handleFile} />
-      <input
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyDown={handleTyping}
-        className="border p-2"
-      />
-      <button onClick={handleSend} className="bg-blue-500 text-white p-2">Send</button>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.map((msg) => {
+          const isMine = msg.sender._id === user._id;
+          const isImage = msg.type === "image";
+          const isFile = msg.type === "file";
+
+          return (
+            <div
+              key={msg._id}
+              className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                  isMine
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                }`}
+              >
+                {!isMine && (
+                  <p className="text-xs font-medium">{msg.sender.name}</p>
+                )}
+                {isImage ? (
+                  <img
+                    src={msg.content}
+                    alt=""
+                    className="rounded max-w-full"
+                  />
+                ) : isFile ? (
+                  <a
+                    href={msg.content}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center text-blue-300 underline"
+                  >
+                    <DocumentIcon className="h-5 w-5 mr-1" />
+                    {msg.content.split("/").pop()}
+                  </a>
+                ) : (
+                  <p>{msg.content}</p>
+                )}
+                <p className="text-xs opacity-70 mt-1">
+                  {new Date(msg.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* File Preview */}
+      {file && (
+        <div className="px-4 py-2 bg-gray-200 dark:bg-gray-700 flex items-center justify-between">
+          <span className="text-sm truncate max-w-xs">
+            {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+          </span>
+          <button
+            onClick={() => {
+              setFile(null);
+              fileInputRef.current.value = "";
+            }}
+            className="text-red-500"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="p-4 bg-white dark:bg-gray-800 border-t dark:border-gray-700">
+        <div className="flex items-center space-x-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFile}
+            className="hidden"
+            accept="image/*,.pdf,.doc,.docx"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="text-gray-600 hover:text-blue-500"
+          >
+            <PaperClipIcon className="h-6 w-6" />
+          </button>
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && handleSend()}
+            placeholder="Type a message..."
+            className="flex-1 p-3 border rounded-full dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={handleSend}
+            disabled={sendText.isPending || uploadFileMut.isPending}
+            className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 disabled:opacity-50"
+          >
+            <PaperAirplaneIcon className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

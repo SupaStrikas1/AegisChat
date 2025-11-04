@@ -1,69 +1,70 @@
-import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid';
+import { ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
 
-const ChatList = () => {
-  const navigate = useNavigate();
-
-  // Fetch chats (v5 syntax)
-  const { data: chats, isLoading } = useQuery({
+const ChatList = ({ onSelectChat, selectedChatId }) => {
+  const { data: chats = [], isLoading } = useQuery({
     queryKey: ['chats'],
-    queryFn: () => api.get('/chat').then((res) => res.data),
+    queryFn: () => api.get('/chat').then(res => res.data),
   });
 
+  const user = JSON.parse(localStorage.getItem('user'));
+
   return (
-    <div className="min-h-screen p-6 bg-gray-100 dark:bg-gray-900">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center mb-6">
-          <ChatBubbleLeftIcon className="h-8 w-8 text-blue-500 mr-2" />
-          <h2 className="text-2xl font-bold">Chats</h2>
-        </div>
+    <>
+      <div className="p-4 border-b border-gray-300 dark:border-gray-700">
+        <h2 className="text-xl font-bold flex items-center">
+          <ChatBubbleLeftIcon className="h-6 w-6 mr-2 text-blue-600" />
+          Chats
+        </h2>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
         {isLoading ? (
-          <p>Loading...</p>
-        ) : chats?.length ? (
-          <ul className="space-y-4">
-            {chats.map((chat) => (
-              <li
-                key={chat._id}
-                className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition duration-200"
-                onClick={() => navigate(`/chat/${chat._id}`)}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium">
-                      {chat.isGroup
-                        ? chat.name
-                        : chat.participants.find((p) => p._id !== localStorage.getItem('userId'))
-                            ?.name}
-                    </h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {chat.lastMessage ? (
-                        chat.lastMessage.content.startsWith('http') ? (
-                          '[Media]'
-                        ) : (
-                          chat.lastMessage.content.length > 30
-                            ? chat.lastMessage.content.substring(0, 30) + '...'
-                            : chat.lastMessage.content
-                        )
-                      ) : (
-                        'No messages yet'
-                      )}
-                    </p>
-                  </div>
-                  <span className="text-sm text-gray-500">
-                    {new Date(chat.updatedAt).toLocaleTimeString()}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="p-4 text-center text-gray-500">Loading...</div>
+        ) : chats.length === 0 ? (
+          <div className="p-4 text-center text-gray-500">No chats yet</div>
         ) : (
-          <p>No chats yet. Start a new one!</p>
+          <ul>
+            {chats.map((chat) => {
+              const other = chat.isGroup
+                ? null
+                : chat.participants.find(p => p._id !== user._id);
+              const title = chat.isGroup ? chat.name : other?.name || 'Unknown';
+              const avatar = other?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(title)}&background=3b82f6&color=fff`;
+
+              return (
+                <li
+                  key={chat._id}
+                  onClick={() => onSelectChat(chat)}
+                  className={`p-4 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition ${
+                    selectedChatId === chat._id ? 'bg-blue-50 dark:bg-gray-700' : ''
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <img
+                      src={avatar}
+                      alt={title}
+                      className="w-12 h-12 rounded-full mr-3"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                        {title}
+                      </h3>
+                      {chat.lastMessage && (
+                        <p className="text-sm text-gray-500 truncate">
+                          {chat.lastMessage.type === 'image' ? '[Image]' : chat.lastMessage.content}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
-    </div>
+    </>
   );
 };
 
