@@ -1,16 +1,18 @@
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation } from "@tanstack/react-query"
-import { useNavigate, Link } from "react-router-dom"
-import { registerSchema } from "../../utils/validators"
-import api from "../../services/api"
-import { toast } from "react-toastify"
-import { Loader2, Mail, Lock, User, ArrowRight } from "lucide-react"
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation } from "@tanstack/react-query";
+import { useNavigate, Link } from "react-router-dom";
+import { registerSchema } from "../../utils/validators";
+import api from "../../services/api";
+import { toast } from "react-toastify";
+import { Loader2, Mail, Lock, User, ArrowRight } from "lucide-react";
+import { generateKeyPair } from "../../utils/crypto";
+import { syncUserKeys } from "../../utils/syncUserKeys";
 
 const RegisterForm = () => {
-  const navigate = useNavigate()
-  const [showPassword, setShowPassword] = useState(false)
+  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -18,20 +20,42 @@ const RegisterForm = () => {
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(registerSchema),
-  })
+  });
 
   const mutation = useMutation({
-    mutationFn: (data) => api.post("/auth/register", data),
-    onSuccess: (res) => {
-      localStorage.setItem("token", res.data.token)
-      localStorage.setItem("user", JSON.stringify(res.data.user))
-      toast.success("Account created!")
-      navigate("/profile")
+    mutationFn: async (data) => {
+      // 1. Generate ECDH key pair
+      const { publicKey, privateKey } = await generateKeyPair();
+
+      // 2. Add publicKey to form data
+      const formData = new FormData();
+      Object.keys(data).forEach((key) => {
+        if (data[key]) formData.append(key, data[key]);
+      });
+      formData.append("publicKey", publicKey); // ← SEND TO SERVER
+
+      // 3. Save privateKey locally (never sent)
+      localStorage.setItem("privateKey", privateKey);
+
+      // 4. Send registration
+      const res = await api.post("/auth/register", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      return { ...res, publicKey }; // pass publicKey to onSuccess
+    },
+    onSuccess: async (res) => {
+      const { token, user } = res.data;
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+      await syncUserKeys({ user });
+      toast.success("Account created!");
+      navigate("/profile");
     },
     onError: (err) => {
-      toast.error(err.response?.data?.msg || "Signup failed")
+      toast.error(err.response?.data?.msg || "Signup failed");
     },
-  })
+  });
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
@@ -40,8 +64,12 @@ const RegisterForm = () => {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 mb-4">
             <span className="text-white font-bold text-lg">A</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-2">Create account</h1>
-          <p className="text-slate-600 dark:text-slate-400 text-sm">Join AegisChat and start chatting securely</p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-2">
+            Create account
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm">
+            Join AegisChat and start chatting securely
+          </p>
         </div>
 
         <form
@@ -50,7 +78,10 @@ const RegisterForm = () => {
         >
           {/* Name Field */}
           <div className="space-y-2">
-            <label htmlFor="name" className="block text-sm font-medium text-slate-900 dark:text-white">
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-slate-900 dark:text-white"
+            >
               Full Name
             </label>
             <div className="relative">
@@ -72,7 +103,10 @@ const RegisterForm = () => {
 
           {/* Username Field */}
           <div className="space-y-2">
-            <label htmlFor="username" className="block text-sm font-medium text-slate-900 dark:text-white">
+            <label
+              htmlFor="username"
+              className="block text-sm font-medium text-slate-900 dark:text-white"
+            >
               Username
             </label>
             <div className="relative">
@@ -94,7 +128,10 @@ const RegisterForm = () => {
 
           {/* Email Field */}
           <div className="space-y-2">
-            <label htmlFor="email" className="block text-sm font-medium text-slate-900 dark:text-white">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-slate-900 dark:text-white"
+            >
               Email address
             </label>
             <div className="relative">
@@ -116,7 +153,10 @@ const RegisterForm = () => {
 
           {/* Password Field */}
           <div className="space-y-2">
-            <label htmlFor="password" className="block text-sm font-medium text-slate-900 dark:text-white">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-slate-900 dark:text-white"
+            >
               Password
             </label>
             <div className="relative">
@@ -145,7 +185,10 @@ const RegisterForm = () => {
 
           {/* Confirm Password Field */}
           <div className="space-y-2">
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-900 dark:text-white">
+            <label
+              htmlFor="confirmPassword"
+              className="block text-sm font-medium text-slate-900 dark:text-white"
+            >
               Confirm Password
             </label>
             <div className="relative">
@@ -160,7 +203,8 @@ const RegisterForm = () => {
             </div>
             {errors.confirmPassword && (
               <p className="text-sm text-red-500 dark:text-red-400 flex items-center gap-1">
-                <span className="text-xs">●</span> {errors.confirmPassword.message}
+                <span className="text-xs">●</span>{" "}
+                {errors.confirmPassword.message}
               </p>
             )}
           </div>
@@ -188,7 +232,9 @@ const RegisterForm = () => {
               <div className="w-full border-t border-slate-300 dark:border-slate-700"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400">or</span>
+              <span className="px-2 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400">
+                or
+              </span>
             </div>
           </div>
 
@@ -208,17 +254,23 @@ const RegisterForm = () => {
 
         <p className="text-center text-xs text-slate-500 dark:text-slate-500 mt-6">
           By signing up, you agree to our{" "}
-          <a href="#" className="hover:text-slate-700 dark:hover:text-slate-300">
+          <a
+            href="#"
+            className="hover:text-slate-700 dark:hover:text-slate-300"
+          >
             Terms of Service
           </a>{" "}
           and{" "}
-          <a href="#" className="hover:text-slate-700 dark:hover:text-slate-300">
+          <a
+            href="#"
+            className="hover:text-slate-700 dark:hover:text-slate-300"
+          >
             Privacy Policy
           </a>
         </p>
       </div>
     </div>
-  )
-}
+  );
+};
 
 export default RegisterForm;

@@ -4,7 +4,7 @@ const jwt = require("jsonwebtoken");
 
 // Register user
 const register = async (req, res) => {
-  const { name, username, email, password } = req.body;
+  const { name, username, email, password, publicKey } = req.body;
   try {
     // Validate input
     if (!name || !username || !email || !password) {
@@ -25,7 +25,7 @@ const register = async (req, res) => {
     }
 
     // Let Mongoose pre('save') hash the password
-    user = new User({ name, username, email, password }); // ← plain password
+    user = new User({ name, username, email, password, publicKey }); // ← plain password
     await user.save();
 
     // Generate JWT
@@ -41,6 +41,7 @@ const register = async (req, res) => {
         name: user.name,
         username: user.username,
         email: user.email,
+        publicKey: user.publicKey,
       },
     });
   } catch (err) {
@@ -86,6 +87,7 @@ const login = async (req, res) => {
         name: user.name,
         username: user.username,
         email: user.email,
+        publicKey: user.publicKey,
       },
     });
   } catch (err) {

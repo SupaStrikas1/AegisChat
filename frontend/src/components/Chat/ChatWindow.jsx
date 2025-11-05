@@ -10,6 +10,7 @@ import {
   PhotoIcon,
   DocumentIcon,
 } from "@heroicons/react/24/solid";
+import { decryptMessage, encryptMessage } from "../../utils/crypto";
 
 const SOCKET_URL = "http://localhost:5000";
 
@@ -24,6 +25,9 @@ const ChatWindow = ({ chat }) => {
   const messagesEndRef = useRef(null);
   const [socket, setSocket] = useState(null);
 
+  const myPrivateKey = localStorage.getItem("privateKey"); // set on login
+  const myPublicKey = localStorage.getItem("publicKey"); // set on login
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -35,18 +39,58 @@ const ChatWindow = ({ chat }) => {
     enabled: !!chatId,
   });
 
+  const uniqueMessages = messages.filter(
+    (m, i, arr) => arr.findIndex((x) => x._id === m._id) === i
+  );
+
   // === SEND TEXT MESSAGE ===
+
   const sendText = useMutation({
-    mutationFn: (content) =>
-      api.post("/message", { chatId, content, type: "text" }),
-    onSuccess: (res) => {
-      queryClient.setQueryData(["messages", chatId], (old) => [
+    mutationFn: async (content) => {
+      const recipient = chat.participants.find((p) => p._id !== user._id);
+      const encrypted = await encryptMessage(
+        content,
+        recipient.publicKey,
+        myPrivateKey
+      );
+
+      console.log("Encrypted result:", encrypted);
+
+      return api.post("/message", {
+        chatId,
+        content: encrypted.ciphertext,
+        iv: encrypted.iv,
+        senderPublicKey: myPublicKey,
+        type: "encrypted",
+      });
+    },
+    onSuccess: (res, sentMessage) => {
+      const newMsg = {
+        ...res.data,
+        content: sentMessage, // store plaintext locally
+        local: true,
+      };
+
+      queryClient.setQueryData(["messages", chatId], (old = []) => [
         ...old,
-        res.data,
+        newMsg,
       ]);
+
       setMessage("");
     },
   });
+
+  // const sendText = useMutation({
+  //   mutationFn: (content) =>
+  //     api.post("/message", { chatId, content, type: "text" }),
+  //   onSuccess: (res) => {
+  //     queryClient.setQueryData(["messages", chatId], (old) => [
+  //       ...old,
+  //       res.data,
+  //     ]);
+  //     setMessage("");
+  //   },
+  // });
 
   // === UPLOAD FILE ===
   const uploadFileMut = useMutation({
@@ -112,6 +156,48 @@ const ChatWindow = ({ chat }) => {
     setFile(f);
   };
 
+  const EncryptedMessageContent = ({
+    msg,
+    myPrivateKey,
+    senderPublicKey,
+    userId,
+  }) => {
+    const [decrypted, setDecrypted] = useState("Decrypting...");
+
+    useEffect(() => {
+      const decrypt = async () => {
+        try {
+          if (msg.sender._id === userId) {
+            console.log(msg);
+            
+            // If it's your own message, check if it's local/plaintext
+            if (msg.local) {
+              setDecrypted(msg.content);
+            } else {
+              // fallback in case it’s encrypted version
+              setDecrypted("You (encrypted)");
+            }
+            return;
+          }
+
+          const text = await decryptMessage(
+            { content: msg.content, iv: msg.iv },
+            senderPublicKey,
+            myPrivateKey
+          );
+          setDecrypted(text);
+        } catch (err) {
+          setDecrypted("Failed to decrypt");
+        }
+      };
+      if (myPrivateKey && senderPublicKey) {
+        decrypt();
+      }
+    }, [msg, myPrivateKey, senderPublicKey]);
+
+    return <p className="break-all">{decrypted}</p>;
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -149,10 +235,9 @@ const ChatWindow = ({ chat }) => {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg) => {
+        {uniqueMessages.map((msg, index) => {
           const isMine = msg.sender._id === user._id;
-          const isImage = msg.type === "image";
-          const isFile = msg.type === "file";
+          const isEncrypted = msg.type === "encrypted";
 
           return (
             <div
@@ -166,16 +251,26 @@ const ChatWindow = ({ chat }) => {
                     : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 }`}
               >
+                {/* Sender name for others */}
                 {!isMine && (
                   <p className="text-xs font-medium">{msg.sender.name}</p>
                 )}
-                {isImage ? (
+
+                {/* ==== AUTO-DECRYPT ==== */}
+                {isEncrypted ? (
+                  <EncryptedMessageContent
+                    msg={msg}
+                    myPrivateKey={myPrivateKey}
+                    senderPublicKey={msg.senderPublicKey}
+                    userId={user._id}
+                  />
+                ) : msg.type === "image" ? (
                   <img
                     src={msg.content}
                     alt=""
                     className="rounded max-w-full"
                   />
-                ) : isFile ? (
+                ) : msg.type === "file" ? (
                   <a
                     href={msg.content}
                     target="_blank"
@@ -186,8 +281,10 @@ const ChatWindow = ({ chat }) => {
                     {msg.content.split("/").pop()}
                   </a>
                 ) : (
-                  <p>{msg.content}</p>
+                  <p className="break-all">{msg.content}</p>
                 )}
+
+                {/* Timestamp */}
                 <p className="text-xs opacity-70 mt-1">
                   {new Date(msg.createdAt).toLocaleTimeString([], {
                     hour: "2-digit",

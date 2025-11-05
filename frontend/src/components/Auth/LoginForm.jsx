@@ -1,16 +1,18 @@
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation } from "@tanstack/react-query"
-import { useNavigate, Link } from "react-router-dom"
-import { loginSchema } from "../../utils/validators"
-import api from "../../services/api"
-import { toast } from "react-toastify"
-import { Loader2, Mail, Lock, ArrowRight } from "lucide-react"
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation } from "@tanstack/react-query";
+import { useNavigate, Link } from "react-router-dom";
+import { loginSchema } from "../../utils/validators";
+import api from "../../services/api";
+import { toast } from "react-toastify";
+import { Loader2, Mail, Lock, ArrowRight } from "lucide-react";
+import { generateKeyPair } from "../../utils/crypto";
+import { syncUserKeys } from "../../utils/syncUserKeys";
 
 const LoginForm = () => {
-  const navigate = useNavigate()
-  const [showPassword, setShowPassword] = useState(false)
+  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -18,20 +20,29 @@ const LoginForm = () => {
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(loginSchema),
-  })
+  });
 
   const mutation = useMutation({
-    mutationFn: (data) => api.post("/auth/login", data),
-    onSuccess: (res) => {
-      localStorage.setItem("token", res.data.token)
-      localStorage.setItem("user", JSON.stringify(res.data.user))
-      toast.success("Login successful!")
-      navigate("/chats")
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.msg || "Login failed")
-    },
-  })
+  mutationFn: (data) => api.post("/auth/login", data),
+  onSuccess: async (res) => {
+    const { token, user } = res.data;
+
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(user));
+
+    // Always ensure E2EE keys exist & are synced
+    const { publicKey, privateKey } = await syncUserKeys(user);
+
+    const updatedUser = { ...user, publicKey };
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+
+    toast.success("Login successful!");
+    navigate("/chats");
+  },
+  onError: (err) => {
+    toast.error(err.response?.data?.msg || "Login failed");
+  },
+});
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
@@ -41,8 +52,12 @@ const LoginForm = () => {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 mb-4">
             <span className="text-white font-bold text-lg">A</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-2">Welcome back</h1>
-          <p className="text-slate-600 dark:text-slate-400 text-sm">Sign in to your AegisChat account</p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-2">
+            Welcome back
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm">
+            Sign in to your AegisChat account
+          </p>
         </div>
 
         {/* Form Container */}
@@ -52,7 +67,10 @@ const LoginForm = () => {
         >
           {/* Email Field */}
           <div className="space-y-2">
-            <label htmlFor="email" className="block text-sm font-medium text-slate-900 dark:text-white">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-slate-900 dark:text-white"
+            >
               Email address
             </label>
             <div className="relative">
@@ -74,7 +92,10 @@ const LoginForm = () => {
           {/* Password Field */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label htmlFor="password" className="block text-sm font-medium text-slate-900 dark:text-white">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-slate-900 dark:text-white"
+              >
                 Password
               </label>
             </div>
@@ -136,7 +157,9 @@ const LoginForm = () => {
               <div className="w-full border-t border-slate-300 dark:border-slate-700"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400">or</span>
+              <span className="px-2 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400">
+                or
+              </span>
             </div>
           </div>
 
@@ -157,17 +180,23 @@ const LoginForm = () => {
         {/* Footer */}
         <p className="text-center text-xs text-slate-500 dark:text-slate-500 mt-6">
           By signing in, you agree to our{" "}
-          <a href="#" className="hover:text-slate-700 dark:hover:text-slate-300">
+          <a
+            href="#"
+            className="hover:text-slate-700 dark:hover:text-slate-300"
+          >
             Terms of Service
           </a>{" "}
           and{" "}
-          <a href="#" className="hover:text-slate-700 dark:hover:text-slate-300">
+          <a
+            href="#"
+            className="hover:text-slate-700 dark:hover:text-slate-300"
+          >
             Privacy Policy
           </a>
         </p>
       </div>
     </div>
-  )
-}
+  );
+};
 
 export default LoginForm;

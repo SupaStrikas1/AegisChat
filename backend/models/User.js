@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema({
   profilePic: { type: String },
   interests: [String],
   bio: { type: String },
-  publicKey: { type: String },
+  publicKey: { type: String, required: true },  // New: Public key for E2EE
   friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   online: { type: Boolean, default: false },
   lastSeen: { type: Date },

@@ -43,7 +43,7 @@ const createChat = async (req, res) => {
 const getAllChats = async (req, res) => {
   try {
     const chats = await Chat.find({ participants: req.user._id })
-      .populate('participants', 'name username profilePic online')
+      .populate('participants', 'name username profilePic online publicKey')
       .sort({ updatedAt: -1 });
 
     // attach last message preview
@@ -66,30 +66,39 @@ const getAllChats = async (req, res) => {
 // ---------- SEND MESSAGE ----------
 const sendMessage = async (req, res) => {
   try {
-    const { chatId, content, type = 'text' } = req.body;
+    const { chatId, content, type = 'text', iv, senderPublicKey } = req.body;
 
     if (!chatId || !content) {
       return res.status(400).json({ msg: 'chatId and content are required' });
     }
 
     const chat = await Chat.findById(chatId);
-    if (!chat) {
-      return res.status(404).json({ msg: 'Chat not found' });
-    }
+    if (!chat) return res.status(404).json({ msg: 'Chat not found' });
 
     if (!chat.participants.includes(req.user._id)) {
       return res.status(403).json({ msg: 'Not authorized' });
     }
 
-    const message = new Message({
-      chat: chatId,        // ← Changed from chatId to chat
+    // === CRITICAL: Build message object with `type` FIRST ===
+    const messageData = {
+      chat: chatId,
       sender: req.user._id,
       content,
-      type,
-    });
+      type, // ← Set type FIRST
+    };
 
+    // Now add E2EE fields only if type is encrypted
+    if (type === 'encrypted') {
+      if (!iv || !senderPublicKey) {
+        return res.status(400).json({ msg: 'iv and senderPublicKey required for encrypted messages' });
+      }
+      messageData.iv = iv;
+      messageData.senderPublicKey = senderPublicKey;
+    }
+
+    const message = new Message(messageData);
     await message.save();
-    await message.populate('sender', 'name username profilePic');
+    await message.populate('sender', 'name username profilePic publicKey');
 
     chat.updatedAt = Date.now();
     await chat.save();
@@ -100,7 +109,7 @@ const sendMessage = async (req, res) => {
 
     res.json(message);
   } catch (err) {
-    console.error('sendMessage error:', err.message, err.stack);
+    console.error('sendMessage error:', err.message);
     res.status(500).json({ msg: 'Server error' });
   }
 };
@@ -110,7 +119,7 @@ const getMessages = async (req, res) => {
   try {
     const { chatId } = req.params;
     const messages = await Message.find({ chat: chatId })  // ← use 'chat'
-      .populate('sender', 'name username profilePic')
+      .populate('sender', 'name username profilePic publicKey')
       .sort({ createdAt: 1 });
     res.json(messages);
   } catch (err) {
