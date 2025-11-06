@@ -3,12 +3,16 @@ import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { UserGroupIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "../../contexts/AuthContext";
+import { useState } from "react";
 
 const FriendsList = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  const [selectedFriends, setSelectedFriends] = useState([]);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState("");
 
   // Fetch friends
   const { data: friends, isLoading: friendsLoading } = useQuery({
@@ -67,12 +71,39 @@ const FriendsList = () => {
     startChatMutation.mutate(friendId);
   };
 
+  const createGroupMutation = useMutation({
+    mutationFn: (data) => {
+      const user = JSON.parse(localStorage.getItem("user")); // get logged-in user
+      return api
+        .post("/chat", {
+          ...data,
+          isGroup: true,
+          createdBy: user._id,
+          participants: [user._id, ...data.participants], // include creator
+        })
+        .then((r) => r.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
+      setShowGroupModal(false);
+      setGroupName("");
+      setSelectedFriends([]);
+      navigate("/chats");
+    },
+  });
+
   return (
     <div className="min-h-screen p-6 bg-gray-100 dark:bg-gray-900">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center mb-6">
           <UserGroupIcon className="h-8 w-8 text-blue-500 mr-2" />
           <h2 className="text-2xl font-bold">Friends</h2>
+          <button
+            onClick={() => setShowGroupModal(true)}
+            className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm hover:bg-purple-700"
+          >
+            + Create Group
+          </button>
         </div>
 
         {/* Pending Requests */}
@@ -135,46 +166,111 @@ const FriendsList = () => {
           <p className="text-gray-500">Loading...</p>
         ) : friends?.length ? (
           <ul className="space-y-4">
-            {friends.map((friend) => (
-              <li
-                key={friend._id}
-                className="flex items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-lg shadow"
-              >
-                <div className="flex items-center">
-                  {friend.profilePic ? (
-                    <img
-                      src={friend.profilePic}
-                      alt={friend.name}
-                      className="w-10 h-10 rounded-full mr-3 object-cover"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 mr-3" />
-                  )}
-                  <div>
-                    <span className="font-medium">
-                      {friend.name} (@{friend.username})
-                    </span>
-                    <span
-                      className={`ml-2 text-sm ${
-                        friend.online ? "text-green-500" : "text-gray-500"
+            {friends.map((friend) => {
+              const isSelected = selectedFriends.includes(friend._id);
+              return (
+                <li
+                  key={friend._id}
+                  className="flex items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-lg shadow"
+                >
+                  <div className="flex items-center">
+                    {friend.profilePic ? (
+                      <img
+                        src={friend.profilePic}
+                        alt={friend.name}
+                        className="w-10 h-10 rounded-full mr-3 object-cover"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 mr-3" />
+                    )}
+                    <div>
+                      <span className="font-medium">
+                        {friend.name} (@{friend.username})
+                      </span>
+                      <span
+                        className={`ml-2 text-sm ${
+                          friend.online ? "text-green-500" : "text-gray-500"
+                        }`}
+                      >
+                        {friend.online ? "Online" : "Offline"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleChat(friend._id)}
+                      className="bg-blue-500 text-white px-4 py-1 rounded-md hover:bg-blue-600 text-sm"
+                    >
+                      Chat
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedFriends((prev) =>
+                          prev.includes(friend._id)
+                            ? prev.filter((id) => id !== friend._id)
+                            : [...prev, friend._id]
+                        );
+                      }}
+                      className={`p-2 rounded-full ${
+                        isSelected ? "bg-green-500" : "bg-gray-300"
                       }`}
                     >
-                      {friend.online ? "Online" : "Offline"}
-                    </span>
+                      <CheckIcon className="h-5 w-5 text-white" />
+                    </button>
                   </div>
-                </div>
-                <button
-                  onClick={() => handleChat(friend._id)}
-                  disabled={startChatMutation.isPending}
-                  className="bg-blue-500 text-white px-4 py-1 rounded-md hover:bg-blue-600 text-sm disabled:opacity-50"
-                >
-                  Chat
-                </button>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="text-gray-500">No friends yet. Send some requests!</p>
+        )}
+
+        {showGroupModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg w-full max-w-md">
+              <h3 className="text-lg font-semibold mb-4">Create Group</h3>
+              <input
+                type="text"
+                placeholder="Group name"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                className="w-full p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 mb-4"
+              />
+              <p className="text-sm text-gray-600 mb-2">
+                Selected: {selectedFriends.length} friend
+                {selectedFriends.length !== 1 ? "s" : ""}
+              </p>
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => {
+                    setShowGroupModal(false);
+                    setGroupName("");
+                    setSelectedFriends([]);
+                  }}
+                  className="px-4 py-2 text-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (!groupName.trim() || selectedFriends.length === 0) {
+                      alert("Name and at least 1 friend required");
+                      return;
+                    }
+                    createGroupMutation.mutate({
+                      name: groupName,
+                      participants: selectedFriends,
+                    });
+                  }}
+                  disabled={createGroupMutation.isPending}
+                  className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 disabled:opacity-50"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

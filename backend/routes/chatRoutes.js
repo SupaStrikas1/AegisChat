@@ -5,7 +5,7 @@ const {
   sendMessage,
   getMessages,
   getAllChats,
-  uploadFile, // <-- new
+  uploadFile,
 } = require("../controllers/chatController");
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });

@@ -28,20 +28,12 @@ const RegisterForm = () => {
       const { publicKey, privateKey } = await generateKeyPair();
 
       // 2. Add publicKey to form data
-      const formData = new FormData();
-      Object.keys(data).forEach((key) => {
-        if (data[key]) formData.append(key, data[key]);
-      });
-      formData.append("publicKey", publicKey); // ← SEND TO SERVER
+      const payload = { ...data, publicKey };
 
       // 3. Save privateKey locally (never sent)
       localStorage.setItem("privateKey", privateKey);
 
-      // 4. Send registration
-      const res = await api.post("/auth/register", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
+      const res = await api.post("/auth/register", payload);
       return { ...res, publicKey }; // pass publicKey to onSuccess
     },
     onSuccess: async (res) => {

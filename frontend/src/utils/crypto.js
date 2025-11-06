@@ -123,3 +123,35 @@ export const decryptMessage = async (
     return "[Failed to decrypt]";
   }
 };
+
+// === GROUP E2EE ===
+export const encryptGroupMessage = async (text, groupKeyB64) => {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    fromB64(groupKeyB64),
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"]
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = encoder.encode(text);
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
+  return {
+    ciphertext: toB64(ciphertext),
+    iv: toB64(iv),
+  };
+};
+
+export const decryptGroupMessage = async (msg, groupKeyB64) => {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    fromB64(groupKeyB64),
+    { name: "AES-GCM" },
+    false,
+    ["decrypt"]
+  );
+  const iv = fromB64(msg.iv);
+  const ciphertext = fromB64(msg.content);
+  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  return decoder.decode(plaintext);
+};

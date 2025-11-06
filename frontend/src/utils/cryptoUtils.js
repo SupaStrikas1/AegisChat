@@ -56,8 +56,6 @@ export const deriveSharedKey = async (recipientPubKeyBase64, salt) => {
     false,
     ['deriveKey']
   );
-
-  console.log();
   
   return await window.crypto.subtle.deriveKey(
     { name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 100000, hash: 'SHA-256' },

@@ -10,7 +10,12 @@ import {
   PhotoIcon,
   DocumentIcon,
 } from "@heroicons/react/24/solid";
-import { decryptMessage, encryptMessage } from "../../utils/crypto";
+import {
+  decryptGroupMessage,
+  decryptMessage,
+  encryptGroupMessage,
+  encryptMessage,
+} from "../../utils/crypto";
 
 const SOCKET_URL = "http://localhost:5000";
 
@@ -47,35 +52,40 @@ const ChatWindow = ({ chat }) => {
 
   const sendText = useMutation({
     mutationFn: async (content) => {
-      const recipient = chat.participants.find((p) => p._id !== user._id);
-      const encrypted = await encryptMessage(
-        content,
-        recipient.publicKey,
-        myPrivateKey
-      );
-
-      console.log("Encrypted result:", encrypted);
-
-      return api.post("/message", {
-        chatId,
-        content: encrypted.ciphertext,
-        iv: encrypted.iv,
-        senderPublicKey: myPublicKey,
-        type: "encrypted",
-      });
+      if (chat.isGroup) {
+        const encrypted = await encryptGroupMessage(content, chat.groupKey);
+        return api.post("/message", {
+          chatId,
+          content: encrypted.ciphertext,
+          iv: encrypted.iv,
+          senderPublicKey: myPublicKey,
+          type: "encrypted",
+        });
+      } else {
+        const recipient = chat.participants.find((p) => p._id !== user._id);
+        const encrypted = await encryptMessage(
+          content,
+          recipient.publicKey,
+          myPrivateKey
+        );
+        return api.post("/message", {
+          chatId,
+          content: encrypted.ciphertext,
+          iv: encrypted.iv,
+          senderPublicKey: myPublicKey,
+          type: "encrypted",
+        });
+      }
     },
     onSuccess: (res, sentMessage) => {
       const newMsg = {
         ...res.data,
-        content: sentMessage, // store plaintext locally
-        local: true,
+        plaintext: sentMessage,
       };
-
       queryClient.setQueryData(["messages", chatId], (old = []) => [
         ...old,
         newMsg,
       ]);
-
       setMessage("");
     },
   });
@@ -168,14 +178,20 @@ const ChatWindow = ({ chat }) => {
       const decrypt = async () => {
         try {
           if (msg.sender._id === userId) {
-            console.log(msg);
-            
-            // If it's your own message, check if it's local/plaintext
-            if (msg.local) {
+            try {
+              const receiverPublicKey = chat.participants.find(
+                (u) => u._id !== userId
+              )?.publicKey;
+
+              const text = await decryptMessage(
+                { content: msg.content, iv: msg.iv },
+                receiverPublicKey,
+                myPrivateKey
+              );
+              setDecrypted(text);
+            } catch (e) {
+              // If decryption fails, assume it's already plaintext
               setDecrypted(msg.content);
-            } else {
-              // fallback in case it’s encrypted version
-              setDecrypted("You (encrypted)");
             }
             return;
           }
@@ -196,6 +212,24 @@ const ChatWindow = ({ chat }) => {
     }, [msg, myPrivateKey, senderPublicKey]);
 
     return <p className="break-all">{decrypted}</p>;
+  };
+
+  const GroupEncryptedMessage = ({ msg, groupKey }) => {
+    const [text, setText] = useState("Decrypting...");
+
+    useEffect(() => {
+      const decrypt = async () => {
+        try {
+          const decrypted = await decryptGroupMessage(msg, groupKey);
+          setText(decrypted);
+        } catch (err) {
+          setText("[Failed]");
+        }
+      };
+      if (groupKey) decrypt();
+    }, [msg, groupKey]);
+
+    return <p className="break-all">{text}</p>;
   };
 
   useEffect(() => {
@@ -258,12 +292,16 @@ const ChatWindow = ({ chat }) => {
 
                 {/* ==== AUTO-DECRYPT ==== */}
                 {isEncrypted ? (
-                  <EncryptedMessageContent
-                    msg={msg}
-                    myPrivateKey={myPrivateKey}
-                    senderPublicKey={msg.senderPublicKey}
-                    userId={user._id}
-                  />
+                  chat.isGroup ? (
+                    <GroupEncryptedMessage msg={msg} groupKey={chat.groupKey} />
+                  ) : (
+                    <EncryptedMessageContent
+                      msg={msg}
+                      myPrivateKey={myPrivateKey}
+                      senderPublicKey={msg.senderPublicKey}
+                      userId={user._id}
+                    />
+                  )
                 ) : msg.type === "image" ? (
                   <img
                     src={msg.content}
