@@ -41,6 +41,7 @@ const createChat = async (req, res) => {
       name: isGroup ? name : undefined,
       groupKey: isGroup ? groupKey : undefined,
       createdBy: req.user._id,
+      admins: isGroup ? [req.user._id] : undefined,
     });
 
     await chat.save();
@@ -198,6 +199,98 @@ const createGroup = async (req, res) => {
   }
 };
 
+// === ADD MEMBER ===
+const addMember = async (req, res) => {
+  try {
+    const { id:chatId } = req.params;
+    const { userId } = req.body;
+    const chat = await Chat.findById(chatId);
+    
+    if (!chat || !chat.isGroup) return res.status(404).json({ msg: 'Group not found' });
+    if (!chat.admins.includes(req.user._id)) return res.status(403).json({ msg: 'Admin only' });
+    if (chat.participants.includes(userId)) return res.status(400).json({ msg: 'Already in group' });
+
+    chat.participants.push(userId);
+    await chat.save();
+    await chat.populate('participants', 'name username profilePic publicKey');
+    await chat.populate('admins', 'name');
+
+    if (req.io) req.io.to(chatId).emit('memberAdded', { userId });
+    res.json(chat);
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+};
+
+// === REMOVE MEMBER ===
+const removeMember = async (req, res) => {
+  try {
+    const { id:chatId } = req.params;
+    const { userId } = req.body;
+    const chat = await Chat.findById(chatId);
+    if (!chat || !chat.isGroup) return res.status(404).json({ msg: 'Group not found' });
+    if (!chat.admins.includes(req.user._id)) return res.status(403).json({ msg: 'Admin only' });
+    if (!chat.participants.includes(userId)) return res.status(400).json({ msg: 'Not in group' });
+
+    chat.participants.pull(userId);
+    chat.admins.pull(userId);
+    await chat.save();
+    await chat.populate('participants', 'name username profilePic publicKey');
+    await chat.populate('admins', 'name');
+
+    if (req.io) req.io.to(chatId).emit('memberRemoved', { userId });
+    res.json(chat);
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+};
+
+// === MAKE ADMIN ===
+const makeAdmin = async (req, res) => {
+  try {
+    const { id:chatId } = req.params;
+    const { userId } = req.body;
+    const chat = await Chat.findById(chatId);
+    if (!chat || !chat.isGroup) return res.status(404).json({ msg: 'Group not found' });
+    if (!chat.admins.includes(req.user._id)) return res.status(403).json({ msg: 'Admin only' });
+    if (!chat.participants.includes(userId)) return res.status(400).json({ msg: 'Not in group' });
+    if (chat.admins.includes(userId)) return res.status(400).json({ msg: 'Already admin' });
+
+    chat.admins.push(userId);
+    await chat.save();
+    await chat.populate('admins', 'name');
+
+    if (req.io) req.io.to(chatId).emit('adminAdded', { userId });
+    res.json(chat);
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+};
+
+// === LEAVE GROUP ===
+const leaveGroup = async (req, res) => {
+  try {
+    const { id:chatId } = req.params;
+    const chat = await Chat.findById(chatId);
+    if (!chat || !chat.isGroup) return res.status(404).json({ msg: 'Group not found' });
+    if (!chat.participants.includes(req.user._id)) return res.status(400).json({ msg: 'Not in group' });
+
+    // Last admin check
+    if (chat.admins.includes(req.user._id) && chat.admins.length === 1) {
+      return res.status(400).json({ msg: 'Last admin must transfer admin role first' });
+    }
+
+    chat.participants.pull(req.user._id);
+    chat.admins.pull(req.user._id);
+    await chat.save();
+
+    if (req.io) req.io.to(chatId).emit('memberRemoved', { userId: req.user._id });
+    res.json({ msg: 'Left group' });
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+};
+
 module.exports = {
   createChat,
   getAllChats,
@@ -205,4 +298,8 @@ module.exports = {
   getMessages,
   uploadFile,
   createGroup,
+  addMember,
+  removeMember,
+  makeAdmin,
+  leaveGroup,
 };

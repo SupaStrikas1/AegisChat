@@ -166,7 +166,7 @@ const getFriends = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate(
       "friends",
-      "name email profilePic online"
+      "name email username profilePic online"
     );
     res.json(user.friends);
   } catch (err) {

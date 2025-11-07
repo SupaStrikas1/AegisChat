@@ -12,6 +12,15 @@ const chatSchema = new mongoose.Schema(
       },
     }, // ← NEW: AES-GCM key (base64) for group
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    admins: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: function () {
+          return this.isGroup;
+        },
+      },
+    ],
     lastMessage: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
   },
   { timestamps: true }

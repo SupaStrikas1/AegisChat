@@ -16,11 +16,13 @@ import {
   encryptGroupMessage,
   encryptMessage,
 } from "../../utils/crypto";
+import { useNavigate } from "react-router-dom";
 
 const SOCKET_URL = "http://localhost:5000";
 
 const ChatWindow = ({ chat }) => {
   const chatId = chat._id;
+  const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
@@ -29,6 +31,11 @@ const ChatWindow = ({ chat }) => {
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const [socket, setSocket] = useState(null);
+
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [friends, setFriends] = useState([]);
 
   const myPrivateKey = localStorage.getItem("privateKey"); // set on login
   const myPublicKey = localStorage.getItem("publicKey"); // set on login
@@ -232,9 +239,30 @@ const ChatWindow = ({ chat }) => {
     return <p className="break-all">{text}</p>;
   };
 
+  // Fetch friends once
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (chat.isGroup && chat.admins?.includes(user._id)) {
+      api.get("/user/friends").then((r) => setFriends(r.data));
+    }
+  }, [chat.isGroup, user._id]);
+
+  // Filter friends not in group
+  const filteredFriends = (friends || []).filter(
+    (f) =>
+      !chat.participants.some((p) => p._id === f._id) &&
+      f?.username?.toLowerCase?.().includes(searchQuery.toLowerCase())
+  );
+
+  // Add member
+  const handleAddMember = async (friendId) => {
+    try {
+      await api.post(`/chat/${chatId}/add`, { userId: friendId });
+      queryClient.invalidateQueries(["chats"]);
+      setSearchQuery("");
+    } catch (err) {
+      alert(err.response?.data?.msg || "Failed to add");
+    }
+  };
 
   if (!chat) return <div className="p-4 text-center">Loading...</div>;
 
@@ -265,6 +293,27 @@ const ChatWindow = ({ chat }) => {
             </p>
           </div>
         </div>
+        {chat.isGroup && (
+          <div className="flex items-center space-x-3">
+            {/* Add Member Button */}
+            {chat.admins?.includes(user._id) && (
+              <button
+                onClick={() => setShowAdminModal(true)}
+                className="text-blue-500 hover:text-blue-600 text-sm font-medium"
+              >
+                + Add
+              </button>
+            )}
+
+            {/* Manage Button (existing) */}
+            <button
+              onClick={() => setShowAdminModal(true)}
+              className="text-blue-500 hover:text-blue-600 text-sm"
+            >
+              Manage
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Messages */}
@@ -385,8 +434,155 @@ const ChatWindow = ({ chat }) => {
           >
             <PaperAirplaneIcon className="h-5 w-5" />
           </button>
+          {chat.isGroup && (
+            <button
+              onClick={() => setShowLeaveModal(true)}
+              className="text-red-500 text-sm ml-2"
+            >
+              Leave
+            </button>
+          )}
         </div>
       </div>
+      {showLeaveModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg">
+            <p>Leave group?</p>
+            {chat.admins.includes(user._id) && chat.admins.length === 1 && (
+              <p className="text-red-500 text-sm">
+                You are the last admin. Transfer admin role first.
+              </p>
+            )}
+            <div className="flex justify-end space-x-2 mt-4">
+              <button
+                onClick={() => setShowLeaveModal(false)}
+                className="px-4 py-2"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() =>
+                  api.post(`/chat/${chatId}/leave`).then(() => {
+                    queryClient.invalidateQueries(["chats"]);
+                    navigate("/chats");
+                  })
+                }
+                disabled={
+                  chat.admins.includes(user._id) && chat.admins.length === 1
+                }
+                className="px-4 py-2 bg-red-500 text-white rounded-md disabled:opacity-50"
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showAdminModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg w-full max-w-md max-h-96 overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">Group Members</h3>
+
+            {/* === ADD MEMBER INPUT === */}
+            {chat.admins?.includes(user._id) && (
+              <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-md">
+                <input
+                  type="text"
+                  placeholder="Search friends by username..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full p-2 border rounded dark:bg-gray-600 dark:border-gray-500"
+                />
+                {searchQuery && filteredFriends.length > 0 && (
+                  <div className="mt-2 max-h-40 overflow-y-auto border rounded">
+                    {filteredFriends.map((friend) => (
+                      <div
+                        key={friend._id}
+                        className="flex items-center justify-between p-2 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
+                        onClick={() => handleAddMember(friend._id)}
+                      >
+                        <span>
+                          {friend.name} (@{friend.username})
+                        </span>
+                        <span className="text-green-500 text-xs">Add</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* === MEMBER LIST === */}
+            {chat.participants.map((p) => {
+              const isAdmin = chat.admins?.includes(p._id);
+              const isMe = p._id === user._id;
+              const isCreator = chat.createdBy === p._id;
+
+              return (
+                <div
+                  key={p._id}
+                  className="flex items-center justify-between py-2"
+                >
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 rounded-full bg-gray-300 mr-2" />
+                    <span>{p.name}</span>
+                    {isAdmin && (
+                      <span className="ml-1 text-xs text-green-600">Admin</span>
+                    )}
+                    {isCreator && (
+                      <span className="ml-1 text-xs text-purple-600">
+                        Creator
+                      </span>
+                    )}
+                  </div>
+                  {chat.admins.includes(user._id) && !isMe && (
+                    <div className="flex space-x-1">
+                      {!isAdmin && (
+                        <button
+                          onClick={() =>
+                            api
+                              .post(`/chat/${chatId}/make-admin`, {
+                                userId: p._id,
+                              })
+                              .then(() =>
+                                queryClient.invalidateQueries(["chats"])
+                              )
+                          }
+                          className="text-xs text-blue-500"
+                        >
+                          Make Admin
+                        </button>
+                      )}
+                      <button
+                        onClick={() =>
+                          api
+                            .post(`/chat/${chatId}/remove`, { userId: p._id })
+                            .then(() =>
+                              queryClient.invalidateQueries(["chats"])
+                            )
+                        }
+                        className="text-xs text-red-500"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <button
+              onClick={() => {
+                setShowAdminModal(false);
+                setSearchQuery("");
+              }}
+              className="mt-4 w-full py-2 bg-gray-300 rounded-md"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
