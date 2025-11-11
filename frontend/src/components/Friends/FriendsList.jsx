@@ -4,6 +4,7 @@ import api from "../../services/api";
 import { UserGroupIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "../../contexts/AuthContext";
 import { useState } from "react";
+import { MessageSquareIcon } from "lucide-react";
 
 const FriendsList = () => {
   const navigate = useNavigate();
@@ -93,52 +94,68 @@ const FriendsList = () => {
   });
 
   return (
-    <div className="min-h-screen p-6 bg-gray-100 dark:bg-gray-900">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center mb-6">
-          <UserGroupIcon className="h-8 w-8 text-blue-500 mr-2" />
-          <h2 className="text-2xl font-bold">Friends</h2>
+    <div className="min-h-screen bg-[#0a0a0a] text-[#fafafa]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-[#365db7] to-[#009a83] rounded-lg">
+              <UserGroupIcon className="h-6 w-6 text-[#171717]" />
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-[#365db7] to-[#009a83] bg-clip-text">
+              Friends
+            </h1>
+          </div>
           <button
             onClick={() => setShowGroupModal(true)}
-            className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm hover:bg-purple-700"
+            className="w-full sm:w-auto px-4 py-2 sm:py-3 bg-gradient-to-r from-[#365db7] to-[#009a83] text-[#171717] font-semibold rounded-lg hover:shadow-lg hover:shadow-[#009a83]/20 transition-all duration-300"
           >
             + Create Group
           </button>
         </div>
 
         {/* Pending Requests */}
-        <div className="mb-8">
-          <h3 className="text-xl font-semibold mb-4">Pending Requests</h3>
+        <div className="my-8">
+          <div className="mb-6">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-white">
+              Friend Requests
+            </h2>
+            {/* <p className="text-[#a1a1a1]">
+                You have {requests.length} pending request{requests.length !== 1 ? "s" : ""}
+              </p> */}
+          </div>
           {requestsLoading ? (
             <p className="text-gray-500">Loading...</p>
           ) : requests?.length ? (
-            <ul className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               {requests
                 .filter((req) => req.status === "pending")
                 .map((req) => (
-                  <li
+                  <div
                     key={req._id}
-                    className="flex items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-lg shadow"
+                    className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-4 sm:p-6 hover:border-[#009a83]/50 transition-all duration-300 flex justify-between"
                   >
-                    <div className="flex items-center">
-                      {req.from.profilePic ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
                         <img
-                          src={req.from.profilePic}
+                          src={req.from.profilePic || "/placeholder.svg"}
                           alt={req.from.name}
-                          className="w-10 h-10 rounded-full mr-3 object-cover"
+                          className="w-12 h-12 rounded-full object-cover flex-shrink-0"
                         />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 mr-3" />
-                      )}
-                      <span className="font-medium">
-                        {req.from.name} (@{req.from.username})
-                      </span>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold truncate">
+                            {req.from.name}
+                          </h3>
+                          <p className="text-sm text-[#a1a1a1] truncate">
+                            @{req.from.username}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => handleAccept(req._id)}
                         disabled={acceptMutation.isPending}
-                        className="bg-green-500 text-white p-2 rounded-full hover:bg-green-600 disabled:opacity-50"
+                        className="flex-1 sm:flex-none px-4 py-2 bg-[#365db7] hover:bg-[#365db7]/90 text-[#171717] rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#365db7]/20"
                         title="Accept"
                       >
                         <CheckIcon className="h-5 w-5" />
@@ -146,61 +163,68 @@ const FriendsList = () => {
                       <button
                         onClick={() => handleReject(req._id)}
                         disabled={rejectMutation.isPending}
-                        className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600 disabled:opacity-50"
+                        className="flex-1 sm:flex-none px-4 py-2 bg-[#e7000b]/20 hover:bg-[#e7000b]/30 text-[#e7000b] rounded-lg font-medium transition-all duration-300"
                         title="Reject"
                       >
                         <XMarkIcon className="h-5 w-5" />
                       </button>
                     </div>
-                  </li>
+                  </div>
                 ))}
-            </ul>
+            </div>
           ) : (
-            <p className="text-gray-500">No pending requests</p>
+            <p className="text-[#a1a1a1]">No pending requests</p>
           )}
         </div>
 
         {/* Friends List */}
-        <h3 className="text-xl font-semibold mb-4">Your Friends</h3>
+        <h3 className="text-2xl sm:text-3xl font-bold mb-2 text-white">
+          Your Friends
+        </h3>
         {friendsLoading ? (
           <p className="text-gray-500">Loading...</p>
         ) : friends?.length ? (
-          <ul className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {friends.map((friend) => {
               const isSelected = selectedFriends.includes(friend._id);
               return (
-                <li
+                <div
                   key={friend._id}
-                  className="flex items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-lg shadow"
+                  className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-4 sm:p-6 hover:border-[#009a83]/50 hover:shadow-lg hover:shadow-[#009a83]/10 transition-all duration-300 flex justify-between items-center"
                 >
-                  <div className="flex items-center">
-                    {friend.profilePic ? (
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-start gap-3 mb-4">
                       <img
-                        src={friend.profilePic}
+                        src={friend.profilePic || "/placeholder.svg"}
                         alt={friend.name}
-                        className="w-10 h-10 rounded-full mr-3 object-cover"
+                        className="w-14 h-14 rounded-full object-cover flex-shrink-0"
                       />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 mr-3" />
-                    )}
-                    <div>
-                      <span className="font-medium">
-                        {friend.name} (@{friend.username})
-                      </span>
-                      <span
-                        className={`ml-2 text-sm ${
-                          friend.online ? "text-green-500" : "text-gray-500"
-                        }`}
-                      >
-                        {friend.online ? "Online" : "Offline"}
-                      </span>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-lg truncate">
+                          {friend.name}
+                        </h3>
+                        <p className="text-sm text-[#a1a1a1] truncate mb-2">
+                          @{friend.username}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`w-2 h-2 rounded-full ${
+                              friend.online ? "bg-[#009a83]" : "bg-[#a1a1a1]"
+                            }`}
+                          />
+                          <span className="text-xs font-medium text-[#a1a1a1]">
+                            {friend.online ? "Online" : "Offline"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex gap-2">
                     <button
                       onClick={() => handleChat(friend._id)}
-                      className="bg-blue-500 text-white px-4 py-1 rounded-md hover:bg-blue-600 text-sm"
+                      className="flex-1 px-3 py-2 bg-[#365db7] hover:bg-[#365db7]/90 text-[#171717] rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all duration-300"
                     >
+                      <MessageSquareIcon className="h-4 w-4" />
                       Chat
                     </button>
                     <button
@@ -211,44 +235,57 @@ const FriendsList = () => {
                             : [...prev, friend._id]
                         );
                       }}
-                      className={`p-2 rounded-full ${
-                        isSelected ? "bg-green-500" : "bg-gray-300"
+                      className={`flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-all duration-300 ${
+                        isSelected
+                          ? "bg-[#009a83] text-[#fafafa]"
+                          : "bg-[#262626] hover:bg-[#262626]/80 text-[#a1a1a1]"
                       }`}
                     >
-                      <CheckIcon className="h-5 w-5 text-white" />
+                      <CheckIcon className="h-4 w-4 inline mr-2" />
+                      {isSelected ? "Selected" : "Select"}
                     </button>
                   </div>
-                </li>
+                </div>
               );
             })}
-          </ul>
+          </div>
         ) : (
-          <p className="text-gray-500">No friends yet. Send some requests!</p>
+          <div className="text-center py-12">
+            <UserGroupIcon className="h-16 w-16 mx-auto text-[#a1a1a1]/40 mb-4" />
+            <p className="text-[#a1a1a1] text-lg">
+              No friends yet. Send some requests!
+            </p>
+          </div>
         )}
 
         {showGroupModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg w-full max-w-md">
-              <h3 className="text-lg font-semibold mb-4">Create Group</h3>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-[#0a0a0a] border border-[#262626] rounded-lg w-full max-w-md p-6 sm:p-8 shadow-2xl">
+              <h3 className="text-2xl font-bold mb-6">Create Group</h3>
               <input
                 type="text"
                 placeholder="Group name"
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
-                className="w-full p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 mb-4"
+                className="w-full px-4 py-3 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[#fafafa] placeholder-[#a1a1a1] focus:outline-none focus:border-[#009a83] focus:ring-2 focus:ring-[#009a83]/20 mb-6 transition-all duration-300"
               />
-              <p className="text-sm text-gray-600 mb-2">
-                Selected: {selectedFriends.length} friend
-                {selectedFriends.length !== 1 ? "s" : ""}
-              </p>
-              <div className="flex justify-end space-x-2">
+              <div className="bg-[#0a0a0a]/50 rounded-lg p-4 mb-6">
+                <p className="text-sm text-[#a1a1a1]">
+                  <span className="font-semibold text-[#fafafa]">
+                    {selectedFriends.length}
+                  </span>{" "}
+                  friend
+                  {selectedFriends.length !== 1 ? "s" : ""} selected
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   onClick={() => {
                     setShowGroupModal(false);
                     setGroupName("");
                     setSelectedFriends([]);
                   }}
-                  className="px-4 py-2 text-gray-600"
+                  className="flex-1 px-4 py-2 sm:py-3 bg-[#262626] hover:bg-[#262626]/80 text-[#fafafa] rounded-lg font-medium transition-all duration-300"
                 >
                   Cancel
                 </button>
@@ -264,7 +301,7 @@ const FriendsList = () => {
                     });
                   }}
                   disabled={createGroupMutation.isPending}
-                  className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 disabled:opacity-50"
+                  className="flex-1 px-4 py-2 sm:py-3 bg-gradient-to-r from-[#365db7] to-[#009a83] text-[#171717] rounded-lg font-medium hover:shadow-lg hover:shadow-[#009a83]/20 transition-all duration-300"
                 >
                   Create
                 </button>

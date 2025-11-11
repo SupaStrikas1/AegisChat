@@ -218,7 +218,7 @@ const ChatWindow = ({ chat }) => {
       }
     }, [msg, myPrivateKey, senderPublicKey]);
 
-    return <p className="break-all">{decrypted}</p>;
+    return <p className="break-all text-sm sm:text-base text-white">{decrypted}</p>;
   };
 
   const GroupEncryptedMessage = ({ msg, groupKey }) => {
@@ -236,7 +236,7 @@ const ChatWindow = ({ chat }) => {
       if (groupKey) decrypt();
     }, [msg, groupKey]);
 
-    return <p className="break-all">{text}</p>;
+    return <p className="break-all text-sm sm:text-base text-white">{text}</p>;
   };
 
   // Fetch friends once
@@ -271,44 +271,50 @@ const ChatWindow = ({ chat }) => {
     : chat.participants.find((p) => p._id !== user._id);
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col h-full bg-[#0a0a0a]">
       {/* Header */}
-      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 p-4 flex items-center">
-        <div className="flex items-center flex-1">
-          {otherUser?.profilePic ? (
+      <div className="bg-[#0a0a0a] border-b border-[#262626] px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center flex-1 min-w-0">
+          <div className="relative">
             <img
-              src={otherUser.profilePic}
-              alt=""
-              className="w-10 h-10 rounded-full mr-3"
+              src={
+                otherUser?.profilePic
+                  ? otherUser.profilePic
+                  : "/placeholder.svg"
+              }
+              alt={otherUser?.name || chat.name}
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover mr-3"
             />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white mr-3 text-sm">
-              {otherUser?.name[0]}
-            </div>
-          )}
-          <div>
-            <h3 className="font-semibold">{otherUser?.name || chat.name}</h3>
-            <p className="text-xs text-gray-500">
-              {typing ? "typing..." : otherUser?.online ? "Online" : "Offline"}
+            <div className="absolute bottom-0 right-3 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0a0a0a]" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-[#fafafa] text-sm sm:text-base truncate">
+              {otherUser?.name || chat.name}
+            </h3>
+            <p className="text-xs text-[#a1a1a1]">
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-1.5 h-1.5 bg-[#a1a1a1] rounded-full animate-pulse" />
+                {typing
+                  ? "typing..."
+                  : otherUser?.online
+                  ? "Online"
+                  : "Offline"}
+              </span>
             </p>
           </div>
         </div>
         {chat.isGroup && (
           <div className="flex items-center space-x-3">
-            {/* Add Member Button */}
-            {chat.admins?.includes(user._id) && (
-              <button
-                onClick={() => setShowAdminModal(true)}
-                className="text-blue-500 hover:text-blue-600 text-sm font-medium"
-              >
-                + Add
-              </button>
-            )}
-
+            <button
+              onClick={() => setShowLeaveModal(true)}
+              className="p-2 bg-gradient-to-r from-[#e7000b] to-[#e7000b]/80 text-[#0a0a0a] font-medium rounded-lg hover:shadow-lg transition-all duration-200 flex items-center gap-2 active:scale-95 text-sm sm:text-base"
+            >
+              Leave
+            </button>
             {/* Manage Button (existing) */}
             <button
               onClick={() => setShowAdminModal(true)}
-              className="text-blue-500 hover:text-blue-600 text-sm"
+              className="p-2 bg-gradient-to-r from-[#009a83] to-[#009a83]/80 text-[#0a0a0a] font-medium rounded-lg hover:shadow-lg transition-all duration-200 flex items-center gap-2 active:scale-95 text-sm sm:text-base"
             >
               Manage
             </button>
@@ -317,8 +323,8 @@ const ChatWindow = ({ chat }) => {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {uniqueMessages.map((msg, index) => {
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4">
+        {uniqueMessages.map((msg) => {
           const isMine = msg.sender._id === user._id;
           const isEncrypted = msg.type === "encrypted";
 
@@ -328,56 +334,80 @@ const ChatWindow = ({ chat }) => {
               className={`flex ${isMine ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                  isMine
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                className={`flex gap-2 max-w-xs sm:max-w-md lg:max-w-lg xl:max-w-xl ${
+                  isMine ? "flex-row-reverse" : "flex-row"
                 }`}
               >
                 {/* Sender name for others */}
                 {!isMine && (
-                  <p className="text-xs font-medium">{msg.sender.name}</p>
-                )}
-
-                {/* ==== AUTO-DECRYPT ==== */}
-                {isEncrypted ? (
-                  chat.isGroup ? (
-                    <GroupEncryptedMessage msg={msg} groupKey={chat.groupKey} />
-                  ) : (
-                    <EncryptedMessageContent
-                      msg={msg}
-                      myPrivateKey={myPrivateKey}
-                      senderPublicKey={msg.senderPublicKey}
-                      userId={user._id}
-                    />
-                  )
-                ) : msg.type === "image" ? (
                   <img
-                    src={msg.content}
-                    alt=""
-                    className="rounded max-w-full"
+                    src={msg.sender.profilePic || "/placeholder.svg"}
+                    alt={msg.sender.name}
+                    className="w-8 h-8 rounded-full object-cover flex-shrink-0"
                   />
-                ) : msg.type === "file" ? (
-                  <a
-                    href={msg.content}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center text-blue-300 underline"
-                  >
-                    <DocumentIcon className="h-5 w-5 mr-1" />
-                    {msg.content.split("/").pop()}
-                  </a>
-                ) : (
-                  <p className="break-all">{msg.content}</p>
                 )}
 
-                {/* Timestamp */}
-                <p className="text-xs opacity-70 mt-1">
-                  {new Date(msg.createdAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
+                <div
+                  className={`flex flex-col ${
+                    isMine ? "items-end" : "items-start"
+                  }`}
+                >
+                  {!isMine && (
+                    <p className="text-xs font-medium text-[#a1a1a1] mb-1">
+                      {msg.sender.name}
+                    </p>
+                  )}
+                  {/* ==== AUTO-DECRYPT ==== */}
+                  <div
+                    className={`px-4 py-3 rounded-2xl break-words ${
+                      isMine
+                        ? "bg-[#365db7] text-[#fafafa] rounded-br-none"
+                        : "bg-[#262626] text-[#fafafa] rounded-bl-none"
+                    }`}
+                  >
+                    {isEncrypted ? (
+                      chat.isGroup ? (
+                        <GroupEncryptedMessage
+                          msg={msg}
+                          groupKey={chat.groupKey}
+                        />
+                      ) : (
+                        <EncryptedMessageContent
+                          msg={msg}
+                          myPrivateKey={myPrivateKey}
+                          senderPublicKey={msg.senderPublicKey}
+                          userId={user._id}
+                        />
+                      )
+                    ) : msg.type === "image" ? (
+                      <img
+                        src={msg.content}
+                        alt=""
+                        className="rounded max-w-full"
+                      />
+                    ) : msg.type === "file" ? (
+                      <a
+                        href={msg.content}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center text-blue-300 underline"
+                      >
+                        <DocumentIcon className="h-5 w-5 mr-1" />
+                        {msg.content.split("/").pop()}
+                      </a>
+                    ) : (
+                      <p className="break-all text-sm sm:text-base text-white">{msg.content}</p>
+                    )}
+
+                    {/* Timestamp */}
+                    <p className="text-xs text-muted-foreground dark:text-muted-foreground mt-1">
+                      {new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           );
@@ -387,8 +417,8 @@ const ChatWindow = ({ chat }) => {
 
       {/* File Preview */}
       {file && (
-        <div className="px-4 py-2 bg-gray-200 dark:bg-gray-700 flex items-center justify-between">
-          <span className="text-sm truncate max-w-xs">
+        <div className="mx-4 sm:mx-6 mb-4 p-3 bg-[#262626] rounded-lg flex items-center justify-between border border-[#a1a1a1]">
+          <span className="text-sm text-[#fafafa] truncate">
             {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
           </span>
           <button
@@ -396,7 +426,7 @@ const ChatWindow = ({ chat }) => {
               setFile(null);
               fileInputRef.current.value = "";
             }}
-            className="text-red-500"
+            className="text-[#e7000b] hover:text-[#e7000b]/60 transition-colors"
           >
             <XMarkIcon className="h-5 w-5" />
           </button>
@@ -404,8 +434,8 @@ const ChatWindow = ({ chat }) => {
       )}
 
       {/* Input */}
-      <div className="p-4 bg-white dark:bg-gray-800 border-t dark:border-gray-700">
-        <div className="flex items-center space-x-2">
+      <div className="bg-[#0a0a0a] border-t border-[#262626] px-4 sm:px-6 py-3 sm:py-4">
+        <div className="flex items-center gap-3">
           <input
             type="file"
             ref={fileInputRef}
@@ -415,7 +445,7 @@ const ChatWindow = ({ chat }) => {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="text-gray-600 hover:text-blue-500"
+            className="p-2 hover:bg-[#262626] text-[#a1a1a1] hover:text-[#fafafa] rounded-full transition-all"
           >
             <PaperClipIcon className="h-6 w-6" />
           </button>
@@ -425,23 +455,15 @@ const ChatWindow = ({ chat }) => {
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && handleSend()}
             placeholder="Type a message..."
-            className="flex-1 p-3 border rounded-full dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-4 py-2.5 sm:py-3 bg-[#262626] border border-[#262626] rounded-full text-[#fafafa] placeholder-[#a1a1a1] focus:outline-none focus:ring-2 focus:ring-[#365db7] transition-all text-sm sm:text-base"
           />
           <button
             onClick={handleSend}
             disabled={sendText.isPending || uploadFileMut.isPending}
-            className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 disabled:opacity-50"
+            className="p-2.5 sm:p-3 bg-[#365db7] text-[#fafafa] rounded-full hover:bg-[#365db7]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             <PaperAirplaneIcon className="h-5 w-5" />
           </button>
-          {chat.isGroup && (
-            <button
-              onClick={() => setShowLeaveModal(true)}
-              className="text-red-500 text-sm ml-2"
-            >
-              Leave
-            </button>
-          )}
         </div>
       </div>
       {showLeaveModal && (

@@ -9,12 +9,19 @@ import ProfilePage from './pages/ProfilePage';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import FriendsPage from './pages/FriendsPage';
-import Home from './components/Home';
 
 const queryClient = new QueryClient();
 
 const App = () => {
   const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <Router>
