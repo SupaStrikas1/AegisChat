@@ -190,9 +190,9 @@ const FriendsList = () => {
               return (
                 <div
                   key={friend._id}
-                  className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-4 sm:p-6 hover:border-[#009a83]/50 hover:shadow-lg hover:shadow-[#009a83]/10 transition-all duration-300 flex justify-between items-center"
+                  className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-4 sm:p-6 hover:border-[#009a83]/50 hover:shadow-lg hover:shadow-[#009a83]/10 transition-all duration-300"
                 >
-                  <div className="flex flex-col h-full">
+                  <div className="flex flex-col">
                     <div className="flex items-start gap-3 mb-4">
                       <img
                         src={friend.profilePic || "/placeholder.svg"}

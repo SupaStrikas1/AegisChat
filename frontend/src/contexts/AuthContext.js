@@ -18,8 +18,15 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
+    const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    delete api.defaults.headers.Authorization;
+    setUser(null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, setLoading }}>
+    <AuthContext.Provider value={{ user, setUser, loading, setLoading, logout }}>
       {children}
     </AuthContext.Provider>
   );

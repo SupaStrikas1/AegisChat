@@ -17,6 +17,7 @@ import {
   encryptMessage,
 } from "../../utils/crypto";
 import { useNavigate } from "react-router-dom";
+import { AlertCircle } from "lucide-react";
 
 const SOCKET_URL = "http://localhost:5000";
 
@@ -55,59 +56,61 @@ const ChatWindow = ({ chat }) => {
     (m, i, arr) => arr.findIndex((x) => x._id === m._id) === i
   );
 
-  // === SEND TEXT MESSAGE ===
+  // === SEND MESSAGE (TEXT / IMAGE / FILE) ===
+  const sendMessage = useMutation({
+    mutationFn: async ({ content, type }) => {
+      // Determine if content is text or file URL
+      const isFile = type === "image" || type === "file";
+      const isEncryptedText = type === "text" && content.trim();
 
-  const sendText = useMutation({
-    mutationFn: async (content) => {
-      if (chat.isGroup) {
-        const encrypted = await encryptGroupMessage(content, chat.groupKey);
-        return api.post("/message", {
-          chatId,
-          content: encrypted.ciphertext,
-          iv: encrypted.iv,
-          senderPublicKey: myPublicKey,
-          type: "encrypted",
-        });
+      if (isEncryptedText) {
+        // Encrypt text
+        if (chat.isGroup) {
+          const encrypted = await encryptGroupMessage(content, chat.groupKey);
+          return api.post("/message", {
+            chatId,
+            content: encrypted.ciphertext,
+            iv: encrypted.iv,
+            senderPublicKey: myPublicKey,
+            type: "encrypted",
+          });
+        } else {
+          const recipient = chat.participants.find((p) => p._id !== user._id);
+          const encrypted = await encryptMessage(
+            content,
+            recipient.publicKey,
+            myPrivateKey
+          );
+          return api.post("/message", {
+            chatId,
+            content: encrypted.ciphertext,
+            iv: encrypted.iv,
+            senderPublicKey: myPublicKey,
+            type: "encrypted",
+          });
+        }
       } else {
-        const recipient = chat.participants.find((p) => p._id !== user._id);
-        const encrypted = await encryptMessage(
-          content,
-          recipient.publicKey,
-          myPrivateKey
-        );
+        // Send file/image URL directly
         return api.post("/message", {
           chatId,
-          content: encrypted.ciphertext,
-          iv: encrypted.iv,
-          senderPublicKey: myPublicKey,
-          type: "encrypted",
+          content,
+          type,
         });
       }
     },
-    onSuccess: (res, sentMessage) => {
+    onSuccess: (res, variables) => {
       const newMsg = {
         ...res.data,
-        plaintext: sentMessage,
+        plaintext: variables.type === "text" ? variables.content : undefined,
       };
       queryClient.setQueryData(["messages", chatId], (old = []) => [
         ...old,
         newMsg,
       ]);
       setMessage("");
+      setFile(null);
     },
   });
-
-  // const sendText = useMutation({
-  //   mutationFn: (content) =>
-  //     api.post("/message", { chatId, content, type: "text" }),
-  //   onSuccess: (res) => {
-  //     queryClient.setQueryData(["messages", chatId], (old) => [
-  //       ...old,
-  //       res.data,
-  //     ]);
-  //     setMessage("");
-  //   },
-  // });
 
   // === UPLOAD FILE ===
   const uploadFileMut = useMutation({
@@ -117,8 +120,9 @@ const ChatWindow = ({ chat }) => {
       return api.post("/message/upload", fd);
     },
     onSuccess: (res) => {
-      sendText.mutate(res.data.url);
-      setFile(null);
+      const url = res.data.url;
+      const type = url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? "image" : "file";
+      sendMessage.mutate({ content: url, type });
     },
   });
 
@@ -157,10 +161,11 @@ const ChatWindow = ({ chat }) => {
 
   const handleSend = () => {
     if (!message.trim() && !file) return;
+
     if (file) {
       uploadFileMut.mutate(file);
     } else {
-      sendText.mutate(message);
+      sendMessage.mutate({ content: message, type: "text" });
     }
   };
 
@@ -218,7 +223,9 @@ const ChatWindow = ({ chat }) => {
       }
     }, [msg, myPrivateKey, senderPublicKey]);
 
-    return <p className="break-all text-sm sm:text-base text-white">{decrypted}</p>;
+    return (
+      <p className="break-all text-sm sm:text-base text-white">{decrypted}</p>
+    );
   };
 
   const GroupEncryptedMessage = ({ msg, groupKey }) => {
@@ -396,7 +403,9 @@ const ChatWindow = ({ chat }) => {
                         {msg.content.split("/").pop()}
                       </a>
                     ) : (
-                      <p className="break-all text-sm sm:text-base text-white">{msg.content}</p>
+                      <p className="break-all text-sm sm:text-base text-white">
+                        {msg.content}
+                      </p>
                     )}
 
                     {/* Timestamp */}
@@ -459,7 +468,7 @@ const ChatWindow = ({ chat }) => {
           />
           <button
             onClick={handleSend}
-            disabled={sendText.isPending || uploadFileMut.isPending}
+            disabled={sendMessage.isPending || uploadFileMut.isPending}
             className="p-2.5 sm:p-3 bg-[#365db7] text-[#fafafa] rounded-full hover:bg-[#365db7]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             <PaperAirplaneIcon className="h-5 w-5" />
@@ -467,18 +476,30 @@ const ChatWindow = ({ chat }) => {
         </div>
       </div>
       {showLeaveModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg">
-            <p>Leave group?</p>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0a0a0a] border border-[#262626]/50 rounded-lg shadow-2xl max-w-md w-full p-6 space-y-6 animate-in fade-in zoom-in-95">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-lg bg-[#82181a]/20 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-6 h-6 text-[#82181a]" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-[#fafafa]">Leave Group?</h2>
+                <p className="text-sm text-[#a1a1a1] mt-1">
+                  You will be removed from this group and lose access to messages.
+                </p>
+              </div>
+            </div>
             {chat.admins.includes(user._id) && chat.admins.length === 1 && (
-              <p className="text-red-500 text-sm">
-                You are the last admin. Transfer admin role first.
-              </p>
+              <div className="bg-[#82181a]/10 border border-[#82181a]/30 rounded-lg p-4 mt-1">
+                <p className="text-sm text-[#82181a] font-medium">
+                  You are the last admin. Please transfer admin role to another member before leaving.
+                </p>
+              </div>
             )}
-            <div className="flex justify-end space-x-2 mt-4">
+            <div className="flex gap-3 pt-4">
               <button
                 onClick={() => setShowLeaveModal(false)}
-                className="px-4 py-2"
+                className="flex-1 px-4 py-2.5 bg-[#0a0a0a] text-[#a1a1a1] hover:bg-muted/80 rounded-lg font-medium transition-colors"
               >
                 Cancel
               </button>
@@ -492,7 +513,7 @@ const ChatWindow = ({ chat }) => {
                 disabled={
                   chat.admins.includes(user._id) && chat.admins.length === 1
                 }
-                className="px-4 py-2 bg-red-500 text-white rounded-md disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#82181a] to-[#82181a]/80 text-[#e7000b] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition-all"
               >
                 Leave
               </button>
@@ -500,33 +521,43 @@ const ChatWindow = ({ chat }) => {
           </div>
         </div>
       )}
+
       {showAdminModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg w-full max-w-md max-h-96 overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">Group Members</h3>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0a0a0a] border border-[#262626] rounded-lg w-full max-w-md p-6 sm:p-8 shadow-2xl">
+            <h3 className="text-2xl font-bold mb-6 text-white">
+              Group Members
+            </h3>
 
             {/* === ADD MEMBER INPUT === */}
             {chat.admins?.includes(user._id) && (
-              <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-md">
+              <div className="mb-4 p-3 bg-[#0a0a0a] border border-[#262626] rounded-md">
                 <input
                   type="text"
                   placeholder="Search friends by username..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full p-2 border rounded dark:bg-gray-600 dark:border-gray-500"
+                  className="w-full px-4 py-3 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[#fafafa] placeholder-[#a1a1a1] focus:outline-none focus:border-[#009a83] focus:ring-2 focus:ring-[#009a83]/20 transition-all duration-300"
                 />
                 {searchQuery && filteredFriends.length > 0 && (
                   <div className="mt-2 max-h-40 overflow-y-auto border rounded">
                     {filteredFriends.map((friend) => (
                       <div
                         key={friend._id}
-                        className="flex items-center justify-between p-2 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
+                        className="w-full flex items-center justify-between p-3 hover:bg-[#0a0a0a]/50 transition-colors text-left border-b border-[#262626]/50 last:border-0 bg-[#0a0a0a]"
                         onClick={() => handleAddMember(friend._id)}
                       >
-                        <span>
-                          {friend.name} (@{friend.username})
+                        <div>
+                          <p className="font-medium text-sm text-white">
+                            {friend.name}
+                          </p>
+                          <p className="text-xs text-[#a1a1a1]">
+                            @{friend.username}
+                          </p>
+                        </div>
+                        <span className="text-xs font-medium text-[#009a83] bg-[#009a83]/10 px-2 py-1 rounded">
+                          Add
                         </span>
-                        <span className="text-green-500 text-xs">Add</span>
                       </div>
                     ))}
                   </div>
@@ -545,14 +576,22 @@ const ChatWindow = ({ chat }) => {
                   key={p._id}
                   className="flex items-center justify-between py-2"
                 >
-                  <div className="flex items-center">
-                    <div className="w-8 h-8 rounded-full bg-gray-300 mr-2" />
-                    <span>{p.name}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <img
+                      src={p.profilePic || "/placeholder.svg"}
+                      alt={p.name}
+                      className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                    />
+                    <span className="font-medium text-sm truncate text-white">
+                      {p.name}
+                    </span>
                     {isAdmin && (
-                      <span className="ml-1 text-xs text-green-600">Admin</span>
+                      <span className="inline-flex items-center gap-1 text-xs font-medium bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-200 px-2 py-1 rounded-full border border-blue-500/30">
+                        Admin
+                      </span>
                     )}
                     {isCreator && (
-                      <span className="ml-1 text-xs text-purple-600">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-200 px-2 py-1 rounded-full border border-purple-500/30">
                         Creator
                       </span>
                     )}
@@ -570,7 +609,7 @@ const ChatWindow = ({ chat }) => {
                                 queryClient.invalidateQueries(["chats"])
                               )
                           }
-                          className="text-xs text-blue-500"
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition-colors"
                         >
                           Make Admin
                         </button>
@@ -583,7 +622,7 @@ const ChatWindow = ({ chat }) => {
                               queryClient.invalidateQueries(["chats"])
                             )
                         }
-                        className="text-xs text-red-500"
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-colors"
                       >
                         Remove
                       </button>
@@ -598,7 +637,7 @@ const ChatWindow = ({ chat }) => {
                 setShowAdminModal(false);
                 setSearchQuery("");
               }}
-              className="mt-4 w-full py-2 bg-gray-300 rounded-md"
+              className="flex-1 w-full px-4 py-2 sm:py-3 bg-[#262626] hover:bg-[#262626]/80 text-[#fafafa] rounded-lg font-medium transition-all duration-300"
             >
               Close
             </button>

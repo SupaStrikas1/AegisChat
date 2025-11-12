@@ -1,18 +1,21 @@
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+"use client";
+
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import {
   HomeIcon,
   ChatBubbleLeftRightIcon,
   UserGroupIcon,
   UserCircleIcon,
   ArrowRightOnRectangleIcon,
-} from '@heroicons/react/24/solid';
+} from "@heroicons/react/24/solid";
+import { ArrowRightEndOnRectangleIcon } from "@heroicons/react/24/outline";
 
 const navItems = [
-  { name: 'Home', path: '/', icon: HomeIcon },
-  { name: 'Chats', path: '/chats', icon: ChatBubbleLeftRightIcon },
-  { name: 'Friends', path: '/friends', icon: UserGroupIcon },
-  { name: 'Profile', path: '/profile', icon: UserCircleIcon },
+  { name: "Home", path: "/", icon: HomeIcon },
+  { name: "Chats", path: "/chats", icon: ChatBubbleLeftRightIcon },
+  { name: "Friends", path: "/friends", icon: UserGroupIcon },
+  { name: "Profile", path: "/profile", icon: UserCircleIcon },
 ];
 
 const Navbar = () => {
@@ -22,7 +25,7 @@ const Navbar = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   const isActive = (path) => location.pathname === path;
@@ -30,27 +33,31 @@ const Navbar = () => {
   return (
     <>
       {/* Desktop: Top Bar */}
-      <nav className="hidden md:flex fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center space-x-8">
+      <nav className="hidden md:flex fixed top-0 left-0 right-0 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-700/50 z-50 backdrop-blur-sm bg-opacity-95">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-0">
+          <div className="flex justify-between items-center h-16">
+            {/* Logo and Brand */}
+            <div className="flex items-center gap-8">
               <h1
-                className="text-xl font-bold text-blue-600 cursor-pointer"
-                onClick={() => navigate('/chats')}
+                className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => navigate("/")}
               >
                 AegisChat
               </h1>
-              <div className="flex space-x-4">
+
+              {/* Nav Items */}
+              <div className="hidden md:flex gap-2">
                 {navItems.map((item) => {
                   const Icon = item.icon;
+                  const active = isActive(item.path);
                   return (
                     <button
                       key={item.path}
                       onClick={() => navigate(item.path)}
-                      className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        isActive(item.path)
-                          ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        active
+                          ? "bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/30"
+                          : "text-slate-300 hover:text-slate-100 hover:bg-slate-700/50 border border-transparent"
                       }`}
                     >
                       <Icon className="h-5 w-5" />
@@ -60,49 +67,89 @@ const Navbar = () => {
                 })}
               </div>
             </div>
+
+            {/* Logout Button */}
             <button
               onClick={handleLogout}
-              className="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-red-500/30 transition-all duration-200 hover:border-red-500/60"
             >
-              <ArrowRightOnRectangleIcon className="h-5 w-5" />
+              <ArrowRightEndOnRectangleIcon className="h-5 w-5" />
               <span>Logout</span>
             </button>
           </div>
         </div>
       </nav>
 
-      {/* Mobile: Bottom Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50">
-        <div className="flex justify-around py-2">
+      {/* Tablet: Side Navigation
+      <nav className="hidden sm:flex md:hidden fixed left-0 top-0 bottom-0 w-20 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-800 border-r border-slate-700/50 z-50 flex-col items-center py-4 gap-4">
+        <h1
+          className="text-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity mb-4"
+          onClick={() => navigate("/")}
+        >
+          AC
+        </h1>
+
+        <div className="flex flex-col gap-4 flex-1">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const active = isActive(item.path);
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
-                className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
-                  isActive(item.path)
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : 'text-gray-600 dark:text-gray-400'
+                className={`flex items-center justify-center p-3 rounded-lg transition-all duration-200 tooltip ${
+                  active
+                    ? "bg-gradient-to-br from-cyan-500/30 to-blue-500/30 text-cyan-300 border border-cyan-500/30"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border border-transparent"
+                }`}
+                title={item.name}
+              >
+                <Icon className="h-6 w-6" />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Logout on Tablet 
+        <button
+          onClick={handleLogout}
+          className="p-3 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-red-500/30 transition-all duration-200"
+          title="Logout"
+        >
+          <ArrowRightOnRectangleIcon className="h-6 w-6" />
+        </button>
+      </nav> */}
+
+      {/* Mobile: Bottom Bar */}
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-gradient-to-r from-slate-900 to-slate-800 border-t border-slate-700/50 z-50 backdrop-blur-sm bg-opacity-95">
+        <div className="flex justify-around items-center py-3">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.path);
+            return (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all duration-200 ${
+                  active
+                    ? "text-cyan-400 bg-cyan-500/10 border border-cyan-500/30"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border border-transparent"
                 }`}
               >
                 <Icon className="h-6 w-6" />
-                <span className="text-xs mt-1">{item.name}</span>
+                <span className="text-xs font-medium">{item.name}</span>
               </button>
             );
           })}
           <button
             onClick={handleLogout}
-            className="flex flex-col items-center p-2 rounded-lg text-red-600"
+            className="flex flex-col items-center gap-1 p-2 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-red-500/30 transition-all duration-200"
           >
-            <ArrowRightOnRectangleIcon className="h-6 w-6" />
-            <span className="text-xs mt-1">Logout</span>
+            <ArrowRightEndOnRectangleIcon className="h-6 w-6" />
+            <span className="text-xs font-medium">Logout</span>
           </button>
         </div>
       </nav>
-
-      {/* Spacer for fixed navbars */}
-      <div className="h-16 md:h-16"></div>
     </>
   );
 };
