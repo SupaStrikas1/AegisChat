@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+
 import {
   BrowserRouter as Router,
   Routes,
@@ -13,7 +13,6 @@ import RegisterPage from "./pages/RegisterPage";
 import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import FriendsPage from "./pages/FriendsPage";
-import Navbar from "./components/Navbar";
 import ProtectedLayout from "./components/Layout/ProtectedLayout";
 
 const queryClient = new QueryClient();

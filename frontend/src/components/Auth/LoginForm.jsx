@@ -7,7 +7,6 @@ import { loginSchema } from "../../utils/validators";
 import api from "../../services/api";
 import { toast } from "react-toastify";
 import { Loader2, Mail, Lock, ArrowRight } from "lucide-react";
-import { generateKeyPair } from "../../utils/crypto";
 import { syncUserKeys } from "../../utils/syncUserKeys";
 
 const LoginForm = () => {
